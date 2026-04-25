@@ -2,68 +2,110 @@ import { useState, useEffect } from 'react';
 
 export function Chat() {
   const [messages, setMessages] = useState<Array<{ user: string; text: string }>>([]);
-  const [inputValue, setInputValue] = useState('');
+  const [inputValue, setInputValue] = useState<String>('');
+  const [username, setUsername] = useState<String>("");
+  const [inputUsername, setInputUsername] = useState<String>("");
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
 
   useEffect(() => {
-    const webSocket = new WebSocket("ws://localhost:55555");
-    let isMounted = true;
+    connect()
+  }, [])
 
-    setStatus("connecting");
+  const connect = () => {
+    const webSocket = new WebSocket("ws://localhost:55555")
+    let isMounted = true
+
+    setStatus("connecting")
 
     webSocket.onopen = () => {
-      if (!isMounted) return;
-      setStatus("connected");
-    };
+      if (!isMounted) return
+      setStatus("connected")
+      setSocket(webSocket)
+    }
 
     webSocket.onmessage = (event) => {
-      if (!isMounted) return;
-
+      if (!isMounted) return
       try {
-        const data = JSON.parse(event.data);
-        setMessages((prev) => [...prev, data]);
-      } catch (err) {
-        console.error("Invalid JSON:", event.data);
+        const data = JSON.parse(event.data)
+        setMessages((prev) => [...prev, data])
+      } catch {
+        console.error("Invalid message")
       }
-    };
+    }
 
-    webSocket.onerror = (err) => {
-      console.error("WebSocket error:", err);
-      if (!isMounted) return;
-      setStatus("error");
-    };
+    webSocket.onerror = () => {
+      if (!isMounted) return
+      setStatus("error")
+    }
 
     webSocket.onclose = () => {
-      if (!isMounted) return;
-      setStatus("error");
-    };
-
-    setSocket(webSocket);
-
-    return () => {
-      isMounted = false;
-      webSocket.close();
-    };
-  }, []);
+      if (!isMounted) return
+      setStatus("error")
+      setSocket(null)
+    }
+  }
 
   const handleSend = () => {
-    if (inputValue.trim()) {
-      setMessages([...messages, { user: 'You', text: inputValue }]);
-      setInputValue('');
-    }
-  };
+    if (!inputValue.trim()) { return } 
+    if (!socket || socket.readyState !== WebSocket.OPEN) { return } 
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+    socket.send(JSON.stringify({
+      user: username,
+      text: inputValue.trim()
+    }))
+
+    setInputValue("")
+  }
+
+  const handleSendKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
       handleSend();
     }
   };
 
+  const handleJoinKeyPress = () => {
+  if (!inputUsername.trim()) { return }
+    setUsername(inputUsername.trim())
+}
+
   return (
     <>
-    {status === "connecting" && <p>Connecting to chat...</p>}
-    {status === "connected" &&
+    {!username && (
+      <div className="w-full p-6 bg-gray-50">
+        <div className="max-w-md mx-auto bg-white p-5 rounded-xl shadow-md">
+          <p className="mb-2">Enter your username</p>
+
+          <input
+            value={inputUsername}
+            onChange={(e) => setInputUsername(e.target.value)}
+            className="w-full border p-2 mb-2 rounded"
+            placeholder="Username"
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleJoinKeyPress()
+            }}
+          />
+
+          <button
+            onClick={() => {
+              if (!inputUsername.trim()) { return } 
+              setUsername(inputUsername.trim())
+            }}
+            disabled={!inputUsername.trim()}
+            className="w-full bg-blue-600 text-white p-2 rounded 
+             disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            Join chat
+          </button>
+        </div>
+      </div>
+    )}
+    {username && status === "connecting" && (
+      <div className="w-full h-full flex items-center justify-center">
+        <p>Connecting to chat...</p>
+      </div>
+    )}
+    {username && status === "connected" &&
       <div className="w-full p-6 bg-gray-50">
         <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md border border-gray-200 p-5">
           <div className="h-32 overflow-y-auto mb-3 space-y-2">
@@ -83,7 +125,7 @@ export function Chat() {
               type="text"
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={handleKeyPress}
+              onKeyPress={handleSendKeyPress}
               placeholder="Type a message..."
               className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -97,13 +139,20 @@ export function Chat() {
         </div>
       </div>
     }
-    {status === "error" && (
-      <div className="w-full p-6 bg-gray-50">
-        <p className="text-red-500 text-sm">
-          Couldn't connect to chat server
-        </p>
-      </div>
+    {username && status === "error" && (
+      <div className="w-full p-6 bg-gray-50 flex flex-col items-center justify-center">
+      <p className="text-red-500 text-sm mb-2">
+        Couldn't connect to chat server
+      </p>
+
+      <button
+        onClick={connect}
+        className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+      >
+        Retry
+      </button>
+    </div>
     )}
-    </>
+  </>
   );
 }

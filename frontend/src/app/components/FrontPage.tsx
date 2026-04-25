@@ -17,6 +17,7 @@ export default function FrontPage() {
     if (!roomId.trim()) {
       return
     }
+    
     navigate(`/room/${roomId.trim()}`);
   };
 
