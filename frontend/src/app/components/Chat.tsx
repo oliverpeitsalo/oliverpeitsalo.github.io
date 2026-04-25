@@ -25,7 +25,11 @@ export function Chat() {
       socket.close()
     }
 
-    const webSocket = new WebSocket("ws://localhost:55555")
+    const socket = new WebSocket(
+      window.location.hostname === "localhost"
+        ? "ws://localhost:55555"
+        : `wss://${window.location.host}:55555`
+    )
 
     setStatus("connecting")
 

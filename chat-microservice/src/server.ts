@@ -31,7 +31,6 @@ webSocketServer.on("connection", (socket) => {
   console.log("Client connected")
 
   socket.on("message", (data) => {
-    // console.log("RAW:", data.toString())
     try {
       const parsed = JSON.parse(data.toString())
 
