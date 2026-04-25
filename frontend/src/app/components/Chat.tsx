@@ -2,14 +2,14 @@ import { useState, useEffect } from 'react';
 
 export function Chat() {
   const [messages, setMessages] = useState<Array<{ user: string; text: string }>>([]);
-  const [inputValue, setInputValue] = useState<String>('');
-  const [username, setUsername] = useState<String>("");
-  const [inputUsername, setInputUsername] = useState<String>("");
+  const [inputValue, setInputValue] = useState<string>('');
+  const [username, setUsername] = useState<string>("");
+  const [inputUsername, setInputUsername] = useState<string>("");
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
 
   useEffect(() => {
-    if (!username) return
+    if (!username) { return }
 
     connect()
 
@@ -19,16 +19,16 @@ export function Chat() {
   }, [username])
 
   const connect = () => {
-    if (!username.trim()) return
+    if (!username.trim()) { return }
 
     if (socket) {
       socket.close()
     }
 
-    const socket = new WebSocket(
+    const webSocket = new WebSocket(
       window.location.hostname === "localhost"
         ? "ws://localhost:55555"
-        : `wss://${window.location.host}:55555`
+        : "wss://trivia-chat.onrender.com"
     )
 
     setStatus("connecting")
@@ -47,7 +47,7 @@ export function Chat() {
       try {
         const data = JSON.parse(event.data)
 
-        if (!data.user || !data.text) return
+        if (!data.user || !data.text) { return }
 
         setMessages((prev) => [...prev, data])
       } catch {

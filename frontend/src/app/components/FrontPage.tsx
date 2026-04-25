@@ -1,24 +1,23 @@
 // import { Container } from "@mui/material"
 import { Chat } from './Chat';
-import { useNavigate } from "react-router-dom";
-import { useState } from 'react';
+// import { useNavigate } from "react-router-dom";
+// import { useState } from 'react';
 
 export default function FrontPage() {
-  const [roomId, setRoomId] = useState("");
-  const navigate = useNavigate();
+  // const [roomId, setRoomId] = useState("");
+  // const navigate = useNavigate();
 
   const handleCreateRoom = () => {
-    const newRoomId = crypto.randomUUID();
-
-    navigate(`/room/${newRoomId}`);
+    // const setRoomId = crypto.randomUUID();
+    // navigate(`/room/${newRoomId}`);
   }
 
   const handleJoinTrivia = () => {
-    if (!roomId.trim()) {
-      return
-    }
+    // if (!roomId.trim()) {
+    //   return
+    // }
     
-    navigate(`/room/${roomId.trim()}`);
+    // navigate(`/room/${roomId.trim()}`);
   };
 
   const handleLeaderboard = () => {
