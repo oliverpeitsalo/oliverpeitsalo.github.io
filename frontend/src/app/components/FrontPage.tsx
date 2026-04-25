@@ -1,20 +1,28 @@
 // import { Container } from "@mui/material"
 import { Chat } from './Chat';
+import { useNavigate } from "react-router-dom";
+import { useState } from 'react';
 
-export default function FrontPageContainer() {
-    const handleCreateRoom = () => {
-        console.log('Create new trivia room');
-    }
+export default function FrontPage() {
+  const [roomId, setRoomId] = useState("");
+  const navigate = useNavigate();
 
-    const handleJoinTrivia = () => {
-        console.log('Join trivia');
-    };
+  const handleCreateRoom = () => {
+    const newRoomId = crypto.randomUUID();
 
-    const handleLeaderboard = () => {
-        console.log('View leaderboard');
-    };
+    navigate(`/room/${newRoomId}`);
+  }
 
-    return (
+  const handleJoinTrivia = () => {
+    if (!roomId.trim()) return;
+    navigate(`/room/${roomId.trim()}`);
+  };
+
+  const handleLeaderboard = () => {
+      console.log('View leaderboard');
+  };
+
+  return (
     <div className="size-full flex flex-col">
       <div className="flex-1 flex items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50">
         <div className="text-center space-y-8">
@@ -44,7 +52,6 @@ export default function FrontPageContainer() {
           </div>
         </div>
       </div>
-
       <Chat />
     </div>
   );

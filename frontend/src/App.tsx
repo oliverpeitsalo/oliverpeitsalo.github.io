@@ -3,7 +3,8 @@ import { Suspense } from 'react'
 import { Container } from '@mui/material'
 import { BrowserRouter, Route, Routes } from "react-router-dom"
 
-import FrontPageContainer from './app/components/FrontPageContainer'
+import FrontPage from './app/components/FrontPage'
+import TriviaGameRoom from './app/components/TriviaRoom'
 
 function App() {
   // const [count, setCount] = useState(0)
@@ -14,8 +15,12 @@ function App() {
           <Container disableGutters>
             <Routes>
               <Route path="/" element= {
-                <FrontPageContainer />
+                <FrontPage />
               }>
+              </Route>
+              <Route path="/room/:roomId" element={
+                <TriviaGameRoom />
+                }>
               </Route>
             </Routes>
           </Container>
