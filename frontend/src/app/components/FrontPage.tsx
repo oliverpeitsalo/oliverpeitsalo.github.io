@@ -14,7 +14,9 @@ export default function FrontPage() {
   }
 
   const handleJoinTrivia = () => {
-    if (!roomId.trim()) return;
+    if (!roomId.trim()) {
+      return
+    }
     navigate(`/room/${roomId.trim()}`);
   };
 
@@ -40,7 +42,7 @@ export default function FrontPage() {
               onClick={handleJoinTrivia}
               className="px-8 py-4 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors shadow-md hover:shadow-lg transform hover:scale-105"
             >
-              Join Trivia
+              Join Trivia Room
             </button>
 
             <button
