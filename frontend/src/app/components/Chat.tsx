@@ -9,25 +9,42 @@ export function Chat() {
   const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
 
   useEffect(() => {
+    if (!username) return
+
     connect()
-  }, [])
+
+    return () => {
+      socket?.close()
+    }
+  }, [username])
 
   const connect = () => {
+    if (!username.trim()) return
+
+    if (socket) {
+      socket.close()
+    }
+
     const webSocket = new WebSocket("ws://localhost:55555")
-    let isMounted = true
 
     setStatus("connecting")
 
     webSocket.onopen = () => {
-      if (!isMounted) return
       setStatus("connected")
       setSocket(webSocket)
+
+      webSocket.send(JSON.stringify({
+        type: "JOIN",
+        user: username
+      }))
     }
 
     webSocket.onmessage = (event) => {
-      if (!isMounted) return
       try {
         const data = JSON.parse(event.data)
+
+        if (!data.user || !data.text) return
+
         setMessages((prev) => [...prev, data])
       } catch {
         console.error("Invalid message")
@@ -35,12 +52,10 @@ export function Chat() {
     }
 
     webSocket.onerror = () => {
-      if (!isMounted) return
       setStatus("error")
     }
 
     webSocket.onclose = () => {
-      if (!isMounted) return
       setStatus("error")
       setSocket(null)
     }
@@ -51,8 +66,9 @@ export function Chat() {
     if (!socket || socket.readyState !== WebSocket.OPEN) { return } 
 
     socket.send(JSON.stringify({
+      type: "CHAT",
       user: username,
-      text: inputValue.trim()
+      text: inputValue
     }))
 
     setInputValue("")

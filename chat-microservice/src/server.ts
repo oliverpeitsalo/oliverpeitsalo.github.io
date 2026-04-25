@@ -5,6 +5,15 @@ dotenv.config()
 
 const port_number = process.env.PORT ? Number(process.env.PORT) : 55555
 
+// TYPES // 
+type Client = { 
+  socket: WebSocket; 
+  username: string; 
+}; 
+// // STRUCTURES // 
+
+const clients = new Map<WebSocket, Client>();
+
 // SERVER //
 const webSocketServer = new WebSocketServer({ port: port_number })
 
@@ -22,21 +31,54 @@ webSocketServer.on("connection", (socket) => {
   console.log("Client connected")
 
   socket.on("message", (data) => {
+    // console.log("RAW:", data.toString())
     try {
-        const parsed = JSON.parse(data.toString())
-        const message = JSON.stringify({
-            user: parsed.user,
-            text: parsed.text
-        })
-        broadcast(message)
-        } catch (err) {
-            console.error("Error handling message:", err)
-        }
-    })
+      const parsed = JSON.parse(data.toString())
+
+      if (parsed.type === "JOIN") {
+        if (!parsed.user) { return }
+
+        clients.set(socket, parsed.user)
+
+        broadcast(JSON.stringify({
+          user: "SERVER",
+          text: `${parsed.user} joined the chat`
+        }))
+
+        return
+      }
+
+      if (parsed.type === "CHAT") {
+        const username = clients.get(socket)
+
+        if (!username || !parsed.text) { return }
+
+        broadcast(JSON.stringify({
+          user: username,
+          text: parsed.text
+        }))
+
+        return
+      }
+
+    } catch (error) {
+      console.error("Error:", error)
+    }
+  })
 
     socket.on("close", () => {
-        console.log("Client disconnected")
-    })
+      const username = clients.get(socket)
+
+    if (username) {
+      broadcast(JSON.stringify({
+        user: "SERVER",
+        text: `${username} left the chat`
+      }))
+    }
+
+    clients.delete(socket)
+    console.log("Client disconnected")
+  })
 })
 
 console.log(`Chat WebSocket service running on ws://localhost:${port_number}`)
