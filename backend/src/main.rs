@@ -309,8 +309,14 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
 
 #[tokio::main]
 async fn main() {
-    let listener = TcpListener::bind("0.0.0.0:9001").await.unwrap();
-    println!("[Server] Running on ws://localhost:9001");
+    // Render provides a PORT environment variable.
+    // Locally, we fall back to 9001.
+    let port = std::env::var("PORT").unwrap_or_else(|_| "9001".to_string());
+    let addr = format!("0.0.0.0:{}", port);
+
+    let listener = TcpListener::bind(&addr).await.unwrap();
+
+    println!("[Server] Running on ws://0.0.0.0:{}", port);
 
     let rooms: Rooms = Arc::new(Mutex::new(HashMap::new()));
 
@@ -323,3 +329,4 @@ async fn main() {
         });
     }
 }
+
