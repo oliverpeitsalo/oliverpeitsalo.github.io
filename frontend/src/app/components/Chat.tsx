@@ -1,12 +1,22 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
-export function Chat() {
+// TYPES //
+type ChatProps = {
+  username: string
+}
+
+export function Chat({ username }: ChatProps) {
+  const socketReference = useRef<WebSocket | null>(null)
+  const messagesEndReference = useRef<HTMLDivElement | null>(null)
+
   const [messages, setMessages] = useState<Array<{ user: string; text: string }>>([]);
   const [inputValue, setInputValue] = useState<string>('');
-  const [username, setUsername] = useState<string>("");
-  const [inputUsername, setInputUsername] = useState<string>("");
-  const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [socket, setSocket] = useState<WebSocket | null>(null)
   const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
+
+  useEffect(() => {
+    messagesEndReference.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages])
 
   useEffect(() => {
     if (!username) { return }
@@ -14,16 +24,17 @@ export function Chat() {
     connect()
 
     return () => {
-      socket?.close()
+      const ws = socketReference.current
+      socketReference.current = null
+      ws?.close()
+      setSocket(null)
     }
   }, [username])
 
   const connect = () => {
     if (!username.trim()) { return }
 
-    if (socket) {
-      socket.close()
-    }
+    socketReference.current?.close()
 
     const webSocket = new WebSocket(
       window.location.hostname === "localhost"
@@ -31,6 +42,8 @@ export function Chat() {
         : "wss://trivia-chat.onrender.com"
     )
 
+    socketReference.current = webSocket
+    setSocket(webSocket)
     setStatus("connecting")
 
     webSocket.onopen = () => {
@@ -60,8 +73,11 @@ export function Chat() {
     }
 
     webSocket.onclose = () => {
-      setStatus("error")
-      setSocket(null)
+       if (socketReference.current === webSocket) {
+        socketReference.current = null
+        setSocket(null)
+        setStatus("error")
+      }
     }
   }
 
@@ -84,48 +100,14 @@ export function Chat() {
     }
   };
 
-  const handleJoinKeyPress = () => {
-  if (!inputUsername.trim()) { return }
-    setUsername(inputUsername.trim())
-}
-
   return (
     <>
-    {!username && (
-      <div className="w-full p-6 bg-gray-50">
-        <div className="max-w-md mx-auto bg-white p-5 rounded-xl shadow-md">
-          <p className="mb-2">Enter your username</p>
-
-          <input
-            value={inputUsername}
-            onChange={(e) => setInputUsername(e.target.value)}
-            className="w-full border p-2 mb-2 rounded"
-            placeholder="Username"
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleJoinKeyPress()
-            }}
-          />
-
-          <button
-            onClick={() => {
-              if (!inputUsername.trim()) { return } 
-              setUsername(inputUsername.trim())
-            }}
-            disabled={!inputUsername.trim()}
-            className="w-full bg-blue-600 text-white p-2 rounded 
-             disabled:bg-gray-400 disabled:cursor-not-allowed"
-          >
-            Join chat
-          </button>
-        </div>
-      </div>
-    )}
-    {username && status === "connecting" && (
+    {status === "connecting" && 
       <div className="w-full h-full flex items-center justify-center">
         <p>Connecting to chat...</p>
       </div>
-    )}
-    {username && status === "connected" &&
+    }
+    {status === "connected" && (
       <div className="w-full p-6 bg-gray-50">
         <div className="max-w-4xl mx-auto bg-white rounded-xl shadow-md border border-gray-200 p-5">
           <div className="h-32 overflow-y-auto mb-3 space-y-2">
@@ -139,6 +121,7 @@ export function Chat() {
                 </div>
               ))
             )}
+            <div ref={messagesEndReference} />
           </div>
           <div className="flex gap-2">
             <input
@@ -158,8 +141,8 @@ export function Chat() {
           </div>
         </div>
       </div>
-    }
-    {username && status === "error" && (
+    )}
+    {status === "error" && (
       <div className="w-full p-6 bg-gray-50 flex flex-col items-center justify-center">
       <p className="text-red-500 text-sm mb-2">
         Couldn't connect to chat server
