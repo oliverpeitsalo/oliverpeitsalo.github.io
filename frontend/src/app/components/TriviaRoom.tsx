@@ -1,5 +1,6 @@
 import { useParams } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
 
 export default function TriviaGameRoom() {
   const { roomId } = useParams();
@@ -8,6 +9,26 @@ export default function TriviaGameRoom() {
   const handleBack = () => {
       navigate(`/`);
   }
+
+  const [ws, setWs] = useState(null);
+  const [serverMsg, setServerMsg] = useState(null);
+
+  // rust backend test example
+  useEffect(() => {
+    const socket = new WebSocket("ws://localhost:9001");
+    socket.onmessage = (event) => {
+      setServerMsg(JSON.parse(event.data));
+    };
+    setWs(socket);
+  }, []);
+
+  // constant answer for testing
+  const sendAnswer = () => {
+    ws.send(JSON.stringify({
+      nick: "Alice",
+      answer: 2
+    }));
+  };
 
   return (
     <>
@@ -18,6 +39,8 @@ export default function TriviaGameRoom() {
         Back to menu
       </button>
       <div>Room: {roomId}</div>
+      <button onClick={sendAnswer}>Send Answer</button>
+      <pre>{JSON.stringify(serverMsg, null, 2)}</pre>
     </>
     );
 }
