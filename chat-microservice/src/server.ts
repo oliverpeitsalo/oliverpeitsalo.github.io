@@ -5,18 +5,12 @@ dotenv.config()
 
 const port_number = process.env.PORT ? Number(process.env.PORT) : 55555
 
-// TYPES // 
-type Client = { 
-  socket: WebSocket; 
-  username: string; 
-}; 
-// // STRUCTURES // 
 
-const clients = new Map<WebSocket, Client>();
+// // STRUCTURES // 
+const clients = new Map<WebSocket, string>();
 
 // SERVER //
 const webSocketServer = new WebSocketServer({ port: port_number })
-
 
 // HELPERS //
 function broadcast(message: string) {
@@ -34,6 +28,7 @@ webSocketServer.on("connection", (socket) => {
     try {
       const parsed = JSON.parse(data.toString())
 
+      // JOIN //
       if (parsed.type === "JOIN") {
         if (!parsed.user) { return }
 
@@ -47,6 +42,7 @@ webSocketServer.on("connection", (socket) => {
         return
       }
 
+      // CHAT //
       if (parsed.type === "CHAT") {
         const username = clients.get(socket)
 
@@ -80,4 +76,4 @@ webSocketServer.on("connection", (socket) => {
   })
 })
 
-console.log(`Chat WebSocket service running on ws://localhost:${port_number}`)
+console.log(`Chat WebSocket service running in port:${port_number}`)
