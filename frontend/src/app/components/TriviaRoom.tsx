@@ -58,13 +58,15 @@ export default function TriviaGameRoom() {
 
       if (msg.scores) {
         setPlayers(
-          msg.scores.map(([name, score], index) => ({
-            id: String(index),
-            name,
-            score,
-          }))
+          (msg.scores as [string, number][])
+            .map(([name, score], index) => ({
+              id: String(index),
+              name,
+              score,
+            }))
         );
       }
+      
     };
 
     socket.onclose = () => console.log("Disconnected from backend");
@@ -220,7 +222,7 @@ export default function TriviaGameRoom() {
               Room Chat
             </h2>
             <div className="flex-1 relative">
-              <Chat />
+              <Chat username={nick} />
             </div>
           </div>
         </div>
