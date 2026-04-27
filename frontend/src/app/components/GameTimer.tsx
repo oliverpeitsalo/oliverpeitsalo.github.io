@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface GameTimerProps {
   durationSeconds: number;
@@ -7,10 +7,6 @@ interface GameTimerProps {
 
 export default function GameTimer({ durationSeconds, onTimeUp }: GameTimerProps) {
   const [timeLeft, setTimeLeft] = useState(durationSeconds);
-
-  useEffect(() => {
-    setTimeLeft(durationSeconds);
-  }, [durationSeconds]);
 
   useEffect(() => {
     if (timeLeft <= 0) {

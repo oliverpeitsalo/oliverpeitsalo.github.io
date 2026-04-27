@@ -12,7 +12,7 @@ export default function FrontPage() {
   const handleCreateRoom = () => {
     // const setRoomId = crypto.randomUUID();
     // navigate(`/room/${newRoomId}`);
-    navigate("/room/:roomId")
+    navigate("/room/1")
   }
 
   const handleJoinTrivia = () => {
