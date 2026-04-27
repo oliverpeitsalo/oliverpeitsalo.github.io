@@ -4,7 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { useState } from 'react';
 
 export default function FrontPage() {
-  const [username, setUsername] = useState<string>("");
+  const [username, setUsername] = useState<string>(() => {
+    return localStorage.getItem("username") || "";
+  });
   const [inputUsername, setInputUsername] = useState<string>("");
   const navigate = useNavigate();
 
@@ -61,11 +63,11 @@ export default function FrontPage() {
   };
 
   const handleContinueKeyPress = () => {
-  if (!inputUsername.trim()) { return }
-      const username = inputUsername.trim();
-      setUsername(username );
-      localStorage.setItem("username", username);
-}
+    if (!inputUsername.trim()) { return }
+      const trimmedUsername = inputUsername.trim();
+      setUsername(trimmedUsername);
+      localStorage.setItem("username", trimmedUsername);
+  }
 
   return (
     <>
