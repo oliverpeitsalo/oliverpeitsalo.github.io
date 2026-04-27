@@ -1,6 +1,6 @@
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
 use tokio_tungstenite::{accept_async, tungstenite::Message};
@@ -27,10 +27,16 @@ struct ServerMessage {
 }
 
 #[derive(Clone)]
-struct RoomState {
+struct TriviaQuestion {
     question: String,
     correct_answer: String,
     answers: Vec<String>,
+}
+
+#[derive(Clone)]
+struct RoomState {
+    current_question: Option<TriviaQuestion>,
+    question_queue: VecDeque<TriviaQuestion>,
     scores: Vec<(String, u32)>,
     clients: Vec<Tx>,
     answered: Vec<String>,
@@ -38,6 +44,7 @@ struct RoomState {
 
 #[derive(Deserialize)]
 struct OpenTdbResponse {
+    response_code: u32,
     results: Vec<OpenTdbQuestion>,
 }
 
@@ -48,28 +55,65 @@ struct OpenTdbQuestion {
     incorrect_answers: Vec<String>,
 }
 
-async fn fetch_question() -> (String, String, Vec<String>) {
-    println!("\n[OpenTDB] Fetching new question...");
+async fn fetch_questions(amount: usize) -> Vec<TriviaQuestion> {
+    println!("\n[OpenTDB] Fetching {} questions...", amount);
 
-    let url = "https://opentdb.com/api.php?amount=1&type=multiple";
+    let url = format!("https://opentdb.com/api.php?amount={}&type=multiple", amount);
 
-    let resp: OpenTdbResponse = reqwest::get(url)
-        .await
-        .expect("failed to fetch question")
-        .json()
-        .await
-        .expect("failed to parse question");
+    for attempt in 0..3 {
+        let resp = reqwest::get(&url).await;
+        if let Err(err) = resp {
+            eprintln!("[OpenTDB] Request failed (attempt {}): {:?}", attempt + 1, err);
+            continue;
+        }
 
-    let q = &resp.results[0];
+        let resp = resp.unwrap();
+        if !resp.status().is_success() {
+            eprintln!("[OpenTDB] HTTP error (attempt {}): {}", attempt + 1, resp.status());
+            continue;
+        }
 
-    println!("[OpenTDB] Question: {}", q.question);
-    println!("[OpenTDB] Correct answer: {}", q.correct_answer);
-    println!("[OpenTDB] Incorrect answers: {:?}", q.incorrect_answers);
+        let full_resp: Result<OpenTdbResponse, _> = resp.json().await;
+        if let Err(err) = full_resp {
+            eprintln!("[OpenTDB] JSON parse error (attempt {}): {:?}", attempt + 1, err);
+            continue;
+        }
 
-    let mut answers = q.incorrect_answers.clone();
-    answers.push(q.correct_answer.clone());
+        let full_resp = full_resp.unwrap();
+        if full_resp.response_code != 0 || full_resp.results.is_empty() {
+            eprintln!("[OpenTDB] API error (attempt {}), response_code: {}, results len: {}", attempt + 1, full_resp.response_code, full_resp.results.len());
+            continue;
+        }
 
-    (q.question.clone(), q.correct_answer.clone(), answers)
+        let questions = full_resp
+            .results
+            .into_iter()
+            .map(|q| {
+                let mut answers = q.incorrect_answers.clone();
+                answers.push(q.correct_answer.clone());
+                TriviaQuestion {
+                    question: q.question,
+                    correct_answer: q.correct_answer,
+                    answers,
+                }
+            })
+            .collect();
+
+        return questions;
+    }
+
+    eprintln!("[OpenTDB] All retries failed, using fallback questions");
+    let fallback = TriviaQuestion {
+        question: "What is the capital of France?".to_string(),
+        correct_answer: "Paris".to_string(),
+        answers: vec![
+            "London".to_string(),
+            "Berlin".to_string(),
+            "Madrid".to_string(),
+            "Paris".to_string(),
+        ],
+    };
+    vec![fallback; amount]
 }
 
 async fn handle_client(stream: TcpStream, rooms: Rooms) {
@@ -141,9 +185,8 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                     rooms_lock.insert(
                         client_msg.room.clone(),
                         RoomState {
-                            question: String::new(),
-                            correct_answer: String::new(),
-                            answers: Vec::new(),
+                            current_question: None,
+                            question_queue: VecDeque::new(),
                             scores: Vec::new(),
                             clients: Vec::new(),
                             answered: Vec::new(),
@@ -159,24 +202,24 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                 }
             }
 
-            // Fetch question if room was new
+            // Fetch a batch of questions if room was new
             if need_new_question {
-                let (q, correct, answers) = fetch_question().await;
-
+                let questions = fetch_questions(10).await;
                 let mut rooms_lock = rooms.lock().unwrap();
                 let room = rooms_lock.get_mut(&client_msg.room).unwrap();
 
-                room.question = q.clone();
-                room.correct_answer = correct.clone();
-                room.answers = answers.clone();
+                let mut queue: VecDeque<TriviaQuestion> = questions.into_iter().collect();
+                let first_question = queue.pop_front().unwrap();
+
+                room.current_question = Some(first_question.clone());
+                room.question_queue = queue;
 
                 println!("[Room {}] Loaded first question", client_msg.room);
 
-                // Broadcast new question
                 let payload = serde_json::to_string(&serde_json::json!({
                     "type": "new_question",
-                    "question": q,
-                    "answers": answers
+                    "question": first_question.question,
+                    "answers": first_question.answers
                 }))
                 .unwrap();
 
@@ -205,9 +248,13 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
             {
                 let mut rooms_lock = rooms.lock().unwrap();
                 let room = rooms_lock.get_mut(&client_msg.room).unwrap();
+                let current_question = room
+                    .current_question
+                    .as_ref()
+                    .expect("current question must exist");
 
                 // Score update
-                let is_correct = answer == &room.correct_answer;
+                let is_correct = answer == &current_question.correct_answer;
 
                 if is_correct {
                     println!("[Room {}] {} answered CORRECTLY!", client_msg.room, client_msg.username);
@@ -254,7 +301,7 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
 
                 response_to_broadcast = Some(ServerMessage {
                     msg_type: "scores_update".to_string(),
-                    question: room.question.clone(),
+                    question: current_question.question.clone(),
                     correct_users,
                     scores: room.scores.clone(),
                 });
@@ -280,21 +327,51 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                 }
             }
 
-            // Fetch new question if needed
+            // Fetch next question when the round is complete
             if all_answered {
-                let (q, correct, answers) = fetch_question().await;
+                let next_question: Option<TriviaQuestion>;
+                let mut need_more_questions = false;
 
                 {
                     let mut rooms_lock = rooms.lock().unwrap();
                     let room = rooms_lock.get_mut(&client_msg.room).unwrap();
-
-                    room.question = q.clone();
-                    room.correct_answer = correct.clone();
-                    room.answers = answers.clone();
-                    room.answered.clear();
+                    next_question = room.question_queue.pop_front();
+                    if room.question_queue.len() < 3 {
+                        need_more_questions = true;
+                    }
                 }
 
-                new_question_payload = Some((q, answers));
+                if let Some(next) = next_question {
+                    {
+                        let mut rooms_lock = rooms.lock().unwrap();
+                        let room = rooms_lock.get_mut(&client_msg.room).unwrap();
+                        room.current_question = Some(next.clone());
+                        room.answered.clear();
+                    }
+
+                    new_question_payload = Some((next.question.clone(), next.answers.clone()));
+
+                    if need_more_questions {
+                        let questions = fetch_questions(10).await;
+                        let mut rooms_lock = rooms.lock().unwrap();
+                        let room = rooms_lock.get_mut(&client_msg.room).unwrap();
+                        room.question_queue.extend(questions);
+                    }
+                } else {
+                    let mut questions = fetch_questions(10).await;
+                    let next = questions.remove(0);
+                    let queue: VecDeque<TriviaQuestion> = questions.into_iter().collect();
+
+                    {
+                        let mut rooms_lock = rooms.lock().unwrap();
+                        let room = rooms_lock.get_mut(&client_msg.room).unwrap();
+                        room.current_question = Some(next.clone());
+                        room.question_queue = queue;
+                        room.answered.clear();
+                    }
+
+                    new_question_payload = Some((next.question.clone(), next.answers.clone()));
+                }
             }
 
             // Broadcast new question
