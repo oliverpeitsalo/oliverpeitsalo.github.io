@@ -54,6 +54,27 @@ export default function FrontPage() {
     } catch (error) {
       console.error("Error creating room:", error);
     }
+  const handleJoinTrivia = async () => {
+    try {
+      const response = await fetch("wss://rust-trvia-microservice.onrender.com", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create room");
+      }
+
+      const data = await response.json();
+      const newRoomId = data.roomId;
+
+      navigate(`/room/${newRoomId}`);
+    } catch (error) {
+      console.error("Error creating room:", error);
+    }
   };
 
   const handleLeaderboard = () => {
@@ -97,6 +118,7 @@ export default function FrontPage() {
                   className="w-full bg-blue-600 text-white p-2 rounded 
                   disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
+                  Join
                   Join
                 </button>
               </div>
