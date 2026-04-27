@@ -98,6 +98,7 @@ export default function FrontPage() {
                   disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
                   Join
+                  Join
                 </button>
               </div>
             </div>
