@@ -31,7 +31,7 @@ export default function TriviaGameRoom() {
   const handleBack = () => navigate(`/`);
 
 
-  const username = localStorage.getItem("username") || "";
+  const username = localStorage.getItem("username") || "Invalid username";
 
   useEffect(() => {
     const socket = new WebSocket("wss://rust-trvia-microservice.onrender.com");
