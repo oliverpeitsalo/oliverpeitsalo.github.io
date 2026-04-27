@@ -6,21 +6,52 @@ import { useState } from 'react';
 export default function FrontPage() {
   const [username, setUsername] = useState<string>("");
   const [inputUsername, setInputUsername] = useState<string>("");
-  // const [roomId, setRoomId] = useState("");
   const navigate = useNavigate();
 
-  const handleCreateRoom = () => {
-    // const setRoomId = crypto.randomUUID();
-    // navigate(`/room/${newRoomId}`);
-    navigate("/room/1")
-  }
+  const handleCreateRoom = async () => {
+    try {
+      const response = await fetch("wss://rust-trvia-microservice.onrender.com", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username }),
+      });
 
-  const handleJoinTrivia = () => {
-    // if (!roomId.trim()) {
-    //   return
-    // }
-    
-    // navigate(`/room/${roomId.trim()}`);
+      if (!response.ok) {
+        throw new Error("Failed to create room");
+      }
+
+      const data = await response.json();
+      const newRoomId = data.roomId;
+
+      navigate(`/room/${newRoomId}`);
+    } catch (error) {
+      console.error("Error creating room:", error);
+    }
+  };
+
+  const handleJoinTrivia = async () => {
+    try {
+      const response = await fetch("wss://rust-trvia-microservice.onrender.com", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ username }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to create room");
+      }
+
+      const data = await response.json();
+      const newRoomId = data.roomId;
+
+      navigate(`/room/${newRoomId}`);
+    } catch (error) {
+      console.error("Error creating room:", error);
+    }
   };
 
   const handleLeaderboard = () => {
@@ -64,7 +95,7 @@ export default function FrontPage() {
                   className="w-full bg-blue-600 text-white p-2 rounded 
                   disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
-                  Continue
+                  Join
                 </button>
               </div>
             </div>

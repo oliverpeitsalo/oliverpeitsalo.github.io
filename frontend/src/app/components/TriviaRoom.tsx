@@ -7,6 +7,10 @@ import { Chat } from "./Chat";
 
 type GamePhase = "WAITING" | "QUESTION" | "REVEAL" | "LEADERBOARD";
 
+type ChatProps = {
+  username: string
+}
+
 type ServerMessage = {
   type?: string;
   question?: string;
@@ -14,7 +18,7 @@ type ServerMessage = {
   scores?: [string, number][];
 };
 
-export default function TriviaGameRoom() {
+export default function TriviaGameRoom({ username }: ChatProps) {
   const { roomId } = useParams();
   const navigate = useNavigate();
 
@@ -28,7 +32,7 @@ export default function TriviaGameRoom() {
   const [options, setOptions] = useState<string[]>([]);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
 
-  const nick = "Alice"; // TODO: replace with real login later
+  
 
   const handleBack = () => navigate(`/`);
 
@@ -43,7 +47,7 @@ export default function TriviaGameRoom() {
       socket.send(
         JSON.stringify({
           room: roomId,
-          nick,
+          username,
           answer: "dummy"
         })
       );
@@ -99,7 +103,7 @@ export default function TriviaGameRoom() {
       socket.send(
         JSON.stringify({
           room: roomId,
-          nick,
+          username,
           answer: options[index], // backend expects TEXT
         })
       );
@@ -235,7 +239,7 @@ export default function TriviaGameRoom() {
               Room Chat
             </h2>
             <div className="flex-1 relative">
-              <Chat username={nick} />
+              <Chat username={username} />
             </div>
           </div>
         </div>
