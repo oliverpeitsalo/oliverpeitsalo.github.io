@@ -5,57 +5,26 @@ import { useState } from 'react';
 
 export default function FrontPage() {
   const [username, setUsername] = useState<string>(() => {
-    return localStorage.getItem("username") || "Invalid username";
+    return sessionStorage.getItem("username") || "";
   });
   const [inputUsername, setInputUsername] = useState<string>("");
+  const [roomId, setRoomId] = useState<string>("");
+  const [showRoomIdInputVisibility, setShowRoomIdInputVisibility] = useState<boolean>(false);
   const navigate = useNavigate();
 
-  const handleCreateRoom = async () => {
-    navigate(`/room/1`);
-    // try {
-    //   const response = await fetch("wss://rust-trvia-microservice.onrender.com", {
-    //     method: "POST",
-    //     headers: {
-    //       "Content-Type": "application/json",
-    //     },
-    //     body: JSON.stringify({ username }),
-    //   });
-
-    //   if (!response.ok) {
-    //     throw new Error("Failed to create room");
-    //   }
-
-    //   const data = await response.json();
-    //   const newRoomId = data.roomId;
-      
-
-    //   navigate(`/room/${newRoomId}`);
-    // } catch (error) {
-    //   console.error("Error creating room:", error);
-    // }
+  const handleCreateRoom = () => {
+    setShowRoomIdInputVisibility(true)
   };
 
-  const handleJoinTrivia = async () => {
-    // try {
-    //   const response = await fetch("wss://rust-trvia-microservice.onrender.com", {
-    //     method: "POST",
-    //     headers: {
-    //       "Content-Type": "application/json",
-    //     },
-    //     body: JSON.stringify({ username }),
-    //   });
+  const handleRoomNavigation = () => {
+    if (!roomId.trim()) { return };
 
-    //   if (!response.ok) {
-    //     throw new Error("Failed to create room");
-    //   }
+    navigate(`/room/${roomId.trim()}`);
+    setShowRoomIdInputVisibility(false);
+    setRoomId("");
+  };
 
-    //   const data = await response.json();
-    //   const newRoomId = data.roomId;
-
-    //   navigate(`/room/${newRoomId}`);
-    // } catch (error) {
-    //   console.error("Error creating room:", error);
-    // }
+  const handleJoinTrivia = () => {
   };
 
   const handleLeaderboard = () => {
@@ -66,7 +35,7 @@ export default function FrontPage() {
     if (!inputUsername.trim()) { return }
       const trimmedUsername = inputUsername.trim();
       setUsername(trimmedUsername);
-      localStorage.setItem("username", trimmedUsername);
+      sessionStorage.setItem("username", trimmedUsername);
   }
 
   return (
@@ -113,19 +82,47 @@ export default function FrontPage() {
                   Username: <span className="font-semibold text-blue-600">{username}</span>
                 </h2>
               </div>
-              <div className="flex flex-col gap-4 min-w-[300px]">
+              <div className="flex flex-col gap-4 min-w-[300px] relative">
                 <button
                   onClick={handleCreateRoom}
                   className="px-8 py-4 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors shadow-md hover:shadow-lg transform hover:scale-105"
                 >
-                  Create New Trivia Room
+                  Enter trivia room
                 </button>
+
+                {showRoomIdInputVisibility && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="bg-white p-6 rounded-lg shadow-lg pointer-events-auto">
+                      <h2 className="text-xl font-bold mb-4">Enter Room ID</h2>
+                      <input
+                        value={roomId}
+                        onChange={(e) => setRoomId(e.target.value)}
+                        placeholder="e.g., 1 or trivia-room"
+                        className="w-full border p-2 rounded mb-4"
+                        
+                        onKeyDown={(e) => e.key === "Enter" && handleRoomNavigation()}
+                      />
+                      <button 
+                        onClick={handleRoomNavigation} 
+                        disabled={!roomId.trim()}
+                        className="bg-blue-500 text-white p-2 rounded disabled:bg-gray-400 disabled:cursor-not-allowed"
+                      >
+                        Enter room
+                      </button>
+                      <button 
+                      onClick={() => {setShowRoomIdInputVisibility(false), setRoomId("")}} 
+                      className="ml-2 bg-red-500 text-white p-2 rounded">
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <button
                   onClick={handleJoinTrivia}
                   className="px-8 py-4 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors shadow-md hover:shadow-lg transform hover:scale-105"
                 >
-                  Join Trivia Room
+                  Bruce Wayne is Batman
                 </button>
 
                 <button

@@ -13,11 +13,10 @@ export function Chat({ username }: ChatProps) {
   const [inputValue, setInputValue] = useState<string>('');
   const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
 
-  // Stable connector so the effect can depend on it without reconnect loops.
+ 
   const connect = useCallback(() => {
     if (!username.trim()) { return }
 
-    // Ensure only one active socket instance at a time.
     socketReference.current?.close()
 
     const webSocket = new WebSocket(
@@ -68,11 +67,9 @@ export function Chat({ username }: ChatProps) {
   useEffect(() => {
     if (!username) { return }
 
-    // Auto-connect when a username is available.
     connect()
 
     return () => {
-      // Close the current connection when username changes or component unmounts.
       const ws = socketReference.current
       socketReference.current = null
       ws?.close()
