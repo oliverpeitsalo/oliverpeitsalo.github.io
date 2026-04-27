@@ -11,7 +11,7 @@ type Rooms = Arc<Mutex<HashMap<String, RoomState>>>;
 #[derive(Serialize, Deserialize, Debug)]
 struct ClientMessage {
     room: String,
-    nick: String,
+    username: String,
     answer: String, // frontend sends the chosen answer text
 }
 
@@ -121,7 +121,7 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
 
             println!(
                 "[Room {}] {} answered: {}",
-                client_msg.room, client_msg.nick, client_msg.answer
+                client_msg.room, client_msg.username, client_msg.answer
             );
 
             // Ensure room exists
@@ -173,7 +173,7 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
 
                 // Add client to room
                 if !room.clients.iter().any(|c| c.same_channel(&tx)) {
-                    println!("[Room {}] {} joined the room", client_msg.room, client_msg.nick);
+                    println!("[Room {}] {} joined the room", client_msg.room, client_msg.username);
                     room.clients.push(tx.clone());
                 }
 
@@ -181,14 +181,14 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                 let is_correct = client_msg.answer == room.correct_answer;
 
                 if is_correct {
-                    println!("[Room {}] {} answered CORRECTLY!", client_msg.room, client_msg.nick);
+                    println!("[Room {}] {} answered CORRECTLY!", client_msg.room, client_msg.username);
                 } else {
-                    println!("[Room {}] {} answered WRONG!", client_msg.room, client_msg.nick);
+                    println!("[Room {}] {} answered WRONG!", client_msg.room, client_msg.username);
                 }
 
                 let mut found = false;
-                for (nick, score) in room.scores.iter_mut() {
-                    if *nick == client_msg.nick {
+                for (username, score) in room.scores.iter_mut() {
+                    if *username == client_msg.username {
                         if is_correct {
                             *score += 1;
                         }
@@ -198,14 +198,14 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
 
                 if !found {
                     room.scores.push((
-                        client_msg.nick.clone(),
+                        client_msg.username.clone(),
                         if is_correct { 1 } else { 0 },
                     ));
                 }
 
                 // Mark answered
-                if !room.answered.contains(&client_msg.nick) {
-                    room.answered.push(client_msg.nick.clone());
+                if !room.answered.contains(&client_msg.username) {
+                    room.answered.push(client_msg.username.clone());
                 }
 
                 println!(
@@ -220,7 +220,7 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                     .scores
                     .iter()
                     .filter(|(_, s)| *s > 0)
-                    .map(|(nick, _)| nick.clone())
+                    .map(|(username, _)| username.clone())
                     .collect();
 
                 response_to_broadcast = Some(ServerMessage {
