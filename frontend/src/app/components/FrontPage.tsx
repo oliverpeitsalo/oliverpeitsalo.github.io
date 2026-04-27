@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 export default function FrontPage() {
   const [username, setUsername] = useState<string>(() => {
-    return localStorage.getItem("username") || "";
+    return localStorage.getItem("username") || "Invalid username";
   });
   const [inputUsername, setInputUsername] = useState<string>("");
   const navigate = useNavigate();
