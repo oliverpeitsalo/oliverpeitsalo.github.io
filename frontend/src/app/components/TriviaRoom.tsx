@@ -7,10 +7,6 @@ import { Chat } from "./Chat";
 
 type GamePhase = "WAITING" | "QUESTION" | "REVEAL" | "LEADERBOARD";
 
-type ChatProps = {
-  username: string
-}
-
 type ServerMessage = {
   type?: string;
   question?: string;
@@ -18,7 +14,7 @@ type ServerMessage = {
   scores?: [string, number][];
 };
 
-export default function TriviaGameRoom({ username }: ChatProps) {
+export default function TriviaGameRoom() {
   const { roomId } = useParams();
   const navigate = useNavigate();
 
@@ -32,9 +28,10 @@ export default function TriviaGameRoom({ username }: ChatProps) {
   const [options, setOptions] = useState<string[]>([]);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
 
-  
-
   const handleBack = () => navigate(`/`);
+
+
+  const username = localStorage.getItem("username") || "";
 
   useEffect(() => {
     const socket = new WebSocket("wss://rust-trvia-microservice.onrender.com");
@@ -239,7 +236,7 @@ export default function TriviaGameRoom({ username }: ChatProps) {
               Room Chat
             </h2>
             <div className="flex-1 relative">
-              <Chat username={username} />
+              <Chat username={username}/>
             </div>
           </div>
         </div>

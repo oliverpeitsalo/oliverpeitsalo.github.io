@@ -10,50 +10,50 @@ export default function FrontPage() {
 
   const handleCreateRoom = async () => {
     navigate(`/room/1`);
-    try {
-      const response = await fetch("wss://rust-trvia-microservice.onrender.com", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ username }),
-      });
+    // try {
+    //   const response = await fetch("wss://rust-trvia-microservice.onrender.com", {
+    //     method: "POST",
+    //     headers: {
+    //       "Content-Type": "application/json",
+    //     },
+    //     body: JSON.stringify({ username }),
+    //   });
 
-      if (!response.ok) {
-        throw new Error("Failed to create room");
-      }
+    //   if (!response.ok) {
+    //     throw new Error("Failed to create room");
+    //   }
 
-      const data = await response.json();
-      const newRoomId = data.roomId;
+    //   const data = await response.json();
+    //   const newRoomId = data.roomId;
       
 
-      navigate(`/room/${newRoomId}`);
-    } catch (error) {
-      console.error("Error creating room:", error);
-    }
+    //   navigate(`/room/${newRoomId}`);
+    // } catch (error) {
+    //   console.error("Error creating room:", error);
+    // }
   };
 
   const handleJoinTrivia = async () => {
-    try {
-      const response = await fetch("wss://rust-trvia-microservice.onrender.com", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ username }),
-      });
+    // try {
+    //   const response = await fetch("wss://rust-trvia-microservice.onrender.com", {
+    //     method: "POST",
+    //     headers: {
+    //       "Content-Type": "application/json",
+    //     },
+    //     body: JSON.stringify({ username }),
+    //   });
 
-      if (!response.ok) {
-        throw new Error("Failed to create room");
-      }
+    //   if (!response.ok) {
+    //     throw new Error("Failed to create room");
+    //   }
 
-      const data = await response.json();
-      const newRoomId = data.roomId;
+    //   const data = await response.json();
+    //   const newRoomId = data.roomId;
 
-      navigate(`/room/${newRoomId}`);
-    } catch (error) {
-      console.error("Error creating room:", error);
-    }
+    //   navigate(`/room/${newRoomId}`);
+    // } catch (error) {
+    //   console.error("Error creating room:", error);
+    // }
   };
 
   const handleLeaderboard = () => {
@@ -62,7 +62,9 @@ export default function FrontPage() {
 
   const handleContinueKeyPress = () => {
   if (!inputUsername.trim()) { return }
-    setUsername(inputUsername.trim())
+      const username = inputUsername.trim();
+      setUsername(username );
+      localStorage.setItem("username", username);
 }
 
   return (
@@ -97,7 +99,6 @@ export default function FrontPage() {
                   className="w-full bg-blue-600 text-white p-2 rounded 
                   disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
-                  Join
                   Join
                 </button>
               </div>
