@@ -69,15 +69,14 @@ async fn fetch_question() -> (String, String, Vec<String>) {
 }
 
 async fn handle_client(stream: TcpStream, rooms: Rooms) {
-    println!("\n[Server] New client connected");
 
     let ws_stream = match accept_async(stream).await {
         Ok(ws) => ws,
-        Err(e) => {
-            eprintln!("[Error] Handshake failed: {:?}", e);
+        Err(_e) => {
             return;
         }
     };
+    println!("\n[Server] New client connected");
 
     let (mut ws_write, mut ws_read) = ws_stream.split();
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<Message>();
@@ -164,8 +163,8 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
             }
 
             // Handle scoring
-            let mut all_answered = false;
-            let mut response_to_broadcast: Option<ServerMessage> = None;
+            let all_answered;
+            let response_to_broadcast: Option<ServerMessage>;
             let mut new_question_payload: Option<(String, Vec<String>)> = None;
 
             {
