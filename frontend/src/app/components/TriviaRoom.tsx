@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import PlayerList from "./PlayerList";
 import type { Player } from "./PlayerList";
 import GameTimer from "./GameTimer";
@@ -7,12 +7,19 @@ import { Chat } from "./Chat";
 
 type GamePhase = "WAITING" | "QUESTION" | "REVEAL" | "LEADERBOARD";
 
+type ServerMessage = {
+  type?: string;
+  question?: string;
+  answers?: string[];
+  scores?: [string, number][];
+};
+
 export default function TriviaGameRoom() {
   const { roomId } = useParams();
   const navigate = useNavigate();
 
-  const [ws, setWs] = useState<WebSocket | null>(null);
-  const [serverMsg, setServerMsg] = useState<any>(null);
+  const socketReference = useRef<WebSocket | null>(null);
+  const [serverMsg, setServerMsg] = useState<ServerMessage | null>(null);
 
   // Game state
   const [phase, setPhase] = useState<GamePhase>("WAITING");
@@ -20,7 +27,6 @@ export default function TriviaGameRoom() {
   const [currentQuestion, setCurrentQuestion] = useState("");
   const [options, setOptions] = useState<string[]>([]);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
-  const [correctAnswerIndex, setCorrectAnswerIndex] = useState<number | null>(null);
 
   const nick = "Alice"; // TODO: replace with real login later
 
@@ -28,6 +34,7 @@ export default function TriviaGameRoom() {
 
   useEffect(() => {
     const socket = new WebSocket("wss://rust-trvia-microservice.onrender.com");
+    socketReference.current = socket;
 
     socket.onopen = () => {
       console.log("Connected to backend");
@@ -43,16 +50,15 @@ export default function TriviaGameRoom() {
     };
 
     socket.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
+      const msg = JSON.parse(event.data) as ServerMessage;
       console.log("WS message:", msg);
       setServerMsg(msg);
 
       if (msg.type === "new_question") {
         setPhase("QUESTION");
-        setCurrentQuestion(msg.question);
-        setOptions(msg.answers);
+        setCurrentQuestion(msg.question ?? "");
+        setOptions(msg.answers ?? []);
         setSelectedAnswer(null);
-        setCorrectAnswerIndex(null);
         return;
       }
 
@@ -71,9 +77,14 @@ export default function TriviaGameRoom() {
 
     socket.onclose = () => console.log("Disconnected from backend");
 
-    setWs(socket);
-    return () => socket.close();
-  }, []);
+    return () => {
+      if (socketReference.current === socket) {
+        socketReference.current = null;
+      }
+
+      socket.close();
+    };
+  }, [roomId]);
   
 
   // Send answer to backend
@@ -82,8 +93,10 @@ export default function TriviaGameRoom() {
 
     setSelectedAnswer(index);
 
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(
+    const socket = socketReference.current;
+
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(
         JSON.stringify({
           room: roomId,
           nick,

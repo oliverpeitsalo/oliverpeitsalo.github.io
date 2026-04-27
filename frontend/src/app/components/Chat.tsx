@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 // TYPES //
 type ChatProps = {
@@ -11,27 +11,9 @@ export function Chat({ username }: ChatProps) {
 
   const [messages, setMessages] = useState<Array<{ user: string; text: string }>>([]);
   const [inputValue, setInputValue] = useState<string>('');
-  const [socket, setSocket] = useState<WebSocket | null>(null)
   const [status, setStatus] = useState<"connecting" | "connected" | "error">("connecting");
 
-  useEffect(() => {
-    messagesEndReference.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
-
-  useEffect(() => {
-    if (!username) { return }
-
-    connect()
-
-    return () => {
-      const ws = socketReference.current
-      socketReference.current = null
-      ws?.close()
-      setSocket(null)
-    }
-  }, [username])
-
-  const connect = () => {
+  const connect = useCallback(() => {
     if (!username.trim()) { return }
 
     socketReference.current?.close()
@@ -43,12 +25,9 @@ export function Chat({ username }: ChatProps) {
     )
 
     socketReference.current = webSocket
-    setSocket(webSocket)
-    setStatus("connecting")
 
     webSocket.onopen = () => {
       setStatus("connected")
-      setSocket(webSocket)
 
       webSocket.send(JSON.stringify({
         type: "JOIN",
@@ -75,14 +54,31 @@ export function Chat({ username }: ChatProps) {
     webSocket.onclose = () => {
        if (socketReference.current === webSocket) {
         socketReference.current = null
-        setSocket(null)
         setStatus("error")
       }
     }
-  }
+  }, [username])
+
+  useEffect(() => {
+    messagesEndReference.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages])
+
+  useEffect(() => {
+    if (!username) { return }
+
+    connect()
+
+    return () => {
+      const ws = socketReference.current
+      socketReference.current = null
+      ws?.close()
+      setSocket(null)
+    }
+  }, [connect, username])
 
   const handleSend = () => {
     if (!inputValue.trim()) { return } 
+    const socket = socketReference.current
     if (!socket || socket.readyState !== WebSocket.OPEN) { return } 
 
     socket.send(JSON.stringify({
@@ -149,7 +145,10 @@ export function Chat({ username }: ChatProps) {
       </p>
 
       <button
-        onClick={connect}
+        onClick={() => {
+          setStatus("connecting")
+          connect()
+        }}
         className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
       >
         Retry
