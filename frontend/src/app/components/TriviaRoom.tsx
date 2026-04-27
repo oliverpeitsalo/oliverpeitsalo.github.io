@@ -40,12 +40,12 @@ export default function TriviaGameRoom() {
     socket.onopen = () => {
       console.log("Connected to backend");
 
-      // Send dummy message
+      // Send join message
       socket.send(
         JSON.stringify({
+          type: "join",
           room: roomId,
-          username,
-          answer: "dummy"
+          username
         })
       );
     };
@@ -63,7 +63,7 @@ export default function TriviaGameRoom() {
         return;
       }
 
-      if (msg.scores) {
+      if (msg.type === "scores_update") {
         setPlayers(
           (msg.scores as [string, number][])
             .map(([name, score], index) => ({
@@ -99,6 +99,7 @@ export default function TriviaGameRoom() {
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(
         JSON.stringify({
+          type: "answer",
           room: roomId,
           username,
           answer: options[index], // backend expects TEXT

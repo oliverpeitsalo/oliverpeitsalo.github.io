@@ -10,13 +10,17 @@ type Rooms = Arc<Mutex<HashMap<String, RoomState>>>;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct ClientMessage {
+    #[serde(rename = "type")]
+    msg_type: Option<String>,
     room: String,
     username: String,
-    answer: String, // frontend sends the chosen answer text
+    answer: Option<String>, // frontend sends the chosen answer text
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 struct ServerMessage {
+    #[serde(rename = "type")]
+    msg_type: String,
     question: String,
     correct_users: Vec<String>,
     scores: Vec<(String, u32)>,
@@ -120,8 +124,8 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
             };
 
             println!(
-                "[Room {}] {} answered: {}",
-                client_msg.room, client_msg.username, client_msg.answer
+                "[Room {}] {} sent: {:?}",
+                client_msg.room, client_msg.username, client_msg
             );
 
             // Ensure room exists
@@ -146,6 +150,13 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                         },
                     );
                 }
+
+                // Add client to room
+                let room = rooms_lock.get_mut(&client_msg.room).unwrap();
+                if !room.clients.iter().any(|c| c.same_channel(&tx)) {
+                    println!("[Room {}] {} joined the room", client_msg.room, client_msg.username);
+                    room.clients.push(tx.clone());
+                }
             }
 
             // Fetch question if room was new
@@ -160,9 +171,33 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                 room.answers = answers.clone();
 
                 println!("[Room {}] Loaded first question", client_msg.room);
+
+                // Broadcast new question
+                let payload = serde_json::to_string(&serde_json::json!({
+                    "type": "new_question",
+                    "question": q,
+                    "answers": answers
+                }))
+                .unwrap();
+
+                let msg = Message::Text(payload);
+
+                for client in room.clients.iter() {
+                    let _ = client.send(msg.clone());
+                }
             }
 
-            // Handle scoring
+            // Skip if join message
+            if client_msg.msg_type.as_deref() == Some("join") {
+                continue;
+            }
+            // Must be answer message
+            if client_msg.msg_type.as_deref() != Some("answer") {
+                continue;
+            }
+
+            let answer = client_msg.answer.as_ref().unwrap();
+            // Handle answer
             let all_answered;
             let response_to_broadcast: Option<ServerMessage>;
             let mut new_question_payload: Option<(String, Vec<String>)> = None;
@@ -171,14 +206,8 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                 let mut rooms_lock = rooms.lock().unwrap();
                 let room = rooms_lock.get_mut(&client_msg.room).unwrap();
 
-                // Add client to room
-                if !room.clients.iter().any(|c| c.same_channel(&tx)) {
-                    println!("[Room {}] {} joined the room", client_msg.room, client_msg.username);
-                    room.clients.push(tx.clone());
-                }
-
                 // Score update
-                let is_correct = client_msg.answer == room.correct_answer;
+                let is_correct = answer == &room.correct_answer;
 
                 if is_correct {
                     println!("[Room {}] {} answered CORRECTLY!", client_msg.room, client_msg.username);
@@ -224,6 +253,7 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                     .collect();
 
                 response_to_broadcast = Some(ServerMessage {
+                    msg_type: "scores_update".to_string(),
                     question: room.question.clone(),
                     correct_users,
                     scores: room.scores.clone(),
