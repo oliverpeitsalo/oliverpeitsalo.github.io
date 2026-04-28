@@ -69,7 +69,6 @@ export default function TriviaGameRoom() {
           q: msg.question ?? "",
           opts: msg.answers ?? []
         });
-        setCorrectAnswer(null);
 
         setPhase((prev) => {
           if (prev === "QUESTION") return "REVEAL";
@@ -111,6 +110,7 @@ export default function TriviaGameRoom() {
       setCurrentQuestion(pendingQuestion.q);
       setOptions(pendingQuestion.opts);
       setSelectedAnswer(null);
+      setCorrectAnswer(null);
       setPhase("QUESTION");
       setPendingQuestion(null);
     }
@@ -222,7 +222,7 @@ export default function TriviaGameRoom() {
                       "bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-800";
 
                     if (phase === "REVEAL") {
-                      if (opt === correctAnswer) {
+                      if (decodeHTML(opt) === decodeHTML(correctAnswer ?? "")) {
                         btnClass = "bg-green-500 border-green-600 text-white";
                       } else if (idx === selectedAnswer) {
                         btnClass = "bg-red-500 border-red-600 text-white";
