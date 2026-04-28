@@ -28,7 +28,7 @@ export default function FrontPage() {
   };
 
   const handleLeaderboard = () => {
-      console.log('View leaderboard');
+      navigate('/leaderboard');
   };
 
   const handleContinueKeyPress = () => {

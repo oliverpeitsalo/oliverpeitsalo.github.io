@@ -3,10 +3,27 @@ use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
+use std::fs;
 use tokio_tungstenite::{accept_async, tungstenite::Message};
 
 type Tx = tokio::sync::mpsc::UnboundedSender<Message>;
 type Rooms = Arc<Mutex<HashMap<String, RoomState>>>;
+type GlobalLeaderboard = Arc<Mutex<HashMap<String, u32>>>;
+
+fn load_leaderboard() -> HashMap<String, u32> {
+    if let Ok(data) = fs::read_to_string("leaderboard.json") {
+        if let Ok(map) = serde_json::from_str(&data) {
+            return map;
+        }
+    }
+    HashMap::new()
+}
+
+fn save_leaderboard(map: &HashMap<String, u32>) {
+    if let Ok(json) = serde_json::to_string(map) {
+        let _ = fs::write("leaderboard.json", json);
+    }
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 struct ClientMessage {
@@ -36,11 +53,17 @@ struct TriviaQuestion {
 }
 
 #[derive(Clone)]
+struct ClientInfo {
+    tx: Tx,
+    username: String,
+}
+
+#[derive(Clone)]
 struct RoomState {
     current_question: Option<TriviaQuestion>,
     question_queue: VecDeque<TriviaQuestion>,
     scores: Vec<(String, u32)>,
-    clients: Vec<Tx>,
+    clients: Vec<ClientInfo>,
     answered: Vec<String>,
 }
 
@@ -118,7 +141,7 @@ async fn fetch_questions(amount: usize) -> Vec<TriviaQuestion> {
     vec![fallback; amount]
 }
 
-async fn handle_client(stream: TcpStream, rooms: Rooms) {
+async fn handle_client(stream: TcpStream, rooms: Rooms, global_leaderboard: GlobalLeaderboard) {
 
     let ws_stream = match accept_async(stream).await {
         Ok(ws) => ws,
@@ -198,9 +221,12 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
 
                 // Add client to room
                 let room = rooms_lock.get_mut(&client_msg.room).unwrap();
-                if !room.clients.iter().any(|c| c.same_channel(&tx)) {
+                if !room.clients.iter().any(|c| c.tx.same_channel(&tx)) {
                     println!("[Room {}] {} joined the room", client_msg.room, client_msg.username);
-                    room.clients.push(tx.clone());
+                    room.clients.push(ClientInfo {
+                        tx: tx.clone(),
+                        username: client_msg.username.clone(),
+                    });
                 }
             }
 
@@ -228,7 +254,7 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                 let msg = Message::Text(payload);
 
                 for client in room.clients.iter() {
-                    let _ = client.send(msg.clone());
+                    let _ = client.tx.send(msg.clone());
                 }
             }
 
@@ -253,6 +279,22 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                 }
                 continue;
             }
+            // Handle get_leaderboard message
+            if client_msg.msg_type.as_deref() == Some("get_leaderboard") {
+                let mut scores: Vec<(String, u32)> = {
+                    let lb_lock = global_leaderboard.lock().unwrap();
+                    lb_lock.iter().map(|(k, v)| (k.clone(), *v)).collect()
+                };
+                scores.sort_by(|a, b| b.1.cmp(&a.1));
+
+                let payload = serde_json::to_string(&serde_json::json!({
+                    "type": "all_time_leaderboard",
+                    "scores": scores
+                })).unwrap();
+                let _ = tx.send(Message::Text(payload));
+                continue;
+            }
+
             // Must be answer message
             if client_msg.msg_type.as_deref() != Some("answer") {
                 continue;
@@ -277,6 +319,9 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
 
                 if is_correct {
                     println!("[Room {}] {} answered CORRECTLY!", client_msg.room, client_msg.username);
+                    let mut lb_lock = global_leaderboard.lock().unwrap();
+                    *lb_lock.entry(client_msg.username.clone()).or_insert(0) += 1;
+                    save_leaderboard(&lb_lock);
                 } else {
                     println!("[Room {}] {} answered WRONG!", client_msg.room, client_msg.username);
                 }
@@ -343,7 +388,7 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                 let room = rooms_lock.get(&client_msg.room).unwrap();
 
                 for client in room.clients.iter() {
-                    let _ = client.send(msg.clone());
+                    let _ = client.tx.send(msg.clone());
                 }
             }
 
@@ -411,7 +456,7 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                 let room = rooms_lock.get(&client_msg.room).unwrap();
 
                 for client in room.clients.iter() {
-                    let _ = client.send(msg.clone());
+                    let _ = client.tx.send(msg.clone());
                 }
             }
         }
@@ -425,8 +470,52 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
     // Cleanup
     {
         let mut rooms_lock = rooms_for_cleanup.lock().unwrap();
-        for (_, room) in rooms_lock.iter_mut() {
-            room.clients.retain(|c| !c.same_channel(&tx_for_cleanup));
+        let mut to_broadcast = None;
+
+        for (room_name, room) in rooms_lock.iter_mut() {
+            let mut disconnected = Vec::new();
+            room.clients.retain(|c| {
+                if c.tx.same_channel(&tx_for_cleanup) {
+                    disconnected.push(c.username.clone());
+                    false
+                } else {
+                    true
+                }
+            });
+
+            if !disconnected.is_empty() {
+                for u in &disconnected {
+                    room.scores.retain(|(score_user, _)| score_user != u);
+                }
+
+                let correct_users: Vec<String> = room
+                    .scores
+                    .iter()
+                    .filter(|(_, s)| *s > 0)
+                    .map(|(username, _)| username.clone())
+                    .collect();
+
+                to_broadcast = Some((
+                    room_name.clone(),
+                    ServerMessage {
+                        msg_type: "scores_update".to_string(),
+                        question: room.current_question.as_ref().map(|q| q.question.clone()).unwrap_or_default(),
+                        correct_users,
+                        scores: room.scores.clone(),
+                        correct_answer: room.current_question.as_ref().map(|q| q.correct_answer.clone()),
+                    }
+                ));
+            }
+        }
+
+        if let Some((room_name, msg)) = to_broadcast {
+            let json = serde_json::to_string(&msg).unwrap();
+            let ws_msg = Message::Text(json);
+            if let Some(room) = rooms_lock.get(&room_name) {
+                for client in room.clients.iter() {
+                    let _ = client.tx.send(ws_msg.clone());
+                }
+            }
         }
     }
 
@@ -445,13 +534,15 @@ async fn main() {
     println!("[Server] Running on ws://0.0.0.0:{}", port);
 
     let rooms: Rooms = Arc::new(Mutex::new(HashMap::new()));
+    let global_leaderboard: GlobalLeaderboard = Arc::new(Mutex::new(load_leaderboard()));
 
     loop {
         let (stream, _) = listener.accept().await.unwrap();
         let rooms_clone = rooms.clone();
+        let global_lb_clone = global_leaderboard.clone();
 
         tokio::spawn(async move {
-            handle_client(stream, rooms_clone).await;
+            handle_client(stream, rooms_clone, global_lb_clone).await;
         });
     }
 }

@@ -5,6 +5,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom"
 
 import FrontPage from './app/components/FrontPage'
 import TriviaGameRoom from './app/components/TriviaRoom'
+import Leaderboard from './app/components/Leaderboard'
 
 function App() {
   // const [count, setCount] = useState(0)
@@ -22,6 +23,7 @@ function App() {
                 <TriviaGameRoom />
                 }>
               </Route>
+              <Route path="/leaderboard" element={<Leaderboard />} />
             </Routes>
           </Container>
         </BrowserRouter>
