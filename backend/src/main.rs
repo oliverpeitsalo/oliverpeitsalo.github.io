@@ -24,6 +24,8 @@ struct ServerMessage {
     question: String,
     correct_users: Vec<String>,
     scores: Vec<(String, u32)>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    correct_answer: Option<String>,
 }
 
 #[derive(Clone)]
@@ -230,8 +232,25 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                 }
             }
 
-            // Skip if join message
+            // Handle join message
             if client_msg.msg_type.as_deref() == Some("join") {
+                let current_q = {
+                    let rooms_lock = rooms.lock().unwrap();
+                    if let Some(room) = rooms_lock.get(&client_msg.room) {
+                        room.current_question.clone()
+                    } else {
+                        None
+                    }
+                };
+
+                if let Some(q) = current_q {
+                    let payload = serde_json::to_string(&serde_json::json!({
+                        "type": "new_question",
+                        "question": q.question,
+                        "answers": q.answers
+                    })).unwrap();
+                    let _ = tx.send(Message::Text(payload));
+                }
                 continue;
             }
             // Must be answer message
@@ -304,6 +323,7 @@ async fn handle_client(stream: TcpStream, rooms: Rooms) {
                     question: current_question.question.clone(),
                     correct_users,
                     scores: room.scores.clone(),
+                    correct_answer: Some(current_question.correct_answer.clone()),
                 });
 
                 // Check if all answered

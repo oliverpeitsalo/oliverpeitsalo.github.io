@@ -12,6 +12,13 @@ type ServerMessage = {
   question?: string;
   answers?: string[];
   scores?: [string, number][];
+  correct_answer?: string;
+};
+
+const decodeHTML = (html: string) => {
+  const txt = document.createElement("textarea");
+  txt.innerHTML = html;
+  return txt.value;
 };
 
 export default function TriviaGameRoom() {
@@ -27,6 +34,8 @@ export default function TriviaGameRoom() {
   const [currentQuestion, setCurrentQuestion] = useState("");
   const [options, setOptions] = useState<string[]>([]);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [pendingQuestion, setPendingQuestion] = useState<{q: string, opts: string[]} | null>(null);
+  const [correctAnswer, setCorrectAnswer] = useState<string | null>(null);
 
   const handleBack = () => navigate(`/`);
 
@@ -56,14 +65,23 @@ export default function TriviaGameRoom() {
       setServerMsg(msg);
 
       if (msg.type === "new_question") {
-        setPhase("QUESTION");
-        setCurrentQuestion(msg.question ?? "");
-        setOptions(msg.answers ?? []);
-        setSelectedAnswer(null);
+        setPendingQuestion({
+          q: msg.question ?? "",
+          opts: msg.answers ?? []
+        });
+        setCorrectAnswer(null);
+
+        setPhase((prev) => {
+          if (prev === "QUESTION") return "REVEAL";
+          return prev;
+        });
         return;
       }
 
       if (msg.type === "scores_update") {
+        if (msg.correct_answer) {
+          setCorrectAnswer(msg.correct_answer);
+        }
         setPlayers(
           (msg.scores as [string, number][])
             .map(([name, score], index) => ({
@@ -87,6 +105,30 @@ export default function TriviaGameRoom() {
     };
   }, [roomId]);
   
+
+  useEffect(() => {
+    if (phase === "WAITING" && pendingQuestion) {
+      setCurrentQuestion(pendingQuestion.q);
+      setOptions(pendingQuestion.opts);
+      setSelectedAnswer(null);
+      setPhase("QUESTION");
+      setPendingQuestion(null);
+    }
+  }, [phase, pendingQuestion]);
+
+  useEffect(() => {
+    if (phase === "REVEAL") {
+      const t1 = setTimeout(() => {
+        setPhase("LEADERBOARD");
+      }, 3000);
+      return () => clearTimeout(t1);
+    } else if (phase === "LEADERBOARD") {
+      const t2 = setTimeout(() => {
+        setPhase("WAITING");
+      }, 3000);
+      return () => clearTimeout(t2);
+    }
+  }, [phase]);
 
   // Send answer to backend
   const sendAnswer = (index: number) => {
@@ -112,19 +154,21 @@ export default function TriviaGameRoom() {
   const handleTimeUp = () => {
     if (phase !== "QUESTION") return;
 
+    if (selectedAnswer === null) {
+      const socket = socketReference.current;
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.send(
+          JSON.stringify({
+            type: "answer",
+            room: roomId,
+            username,
+            answer: "", // empty answer
+          })
+        );
+      }
+    }
+
     setPhase("REVEAL");
-
-    // Backend does NOT send correct answer index
-    // So we highlight nothing — only show red/green based on selected answer
-    // (Optional: backend could send correct answer text)
-    setTimeout(() => {
-      setPhase("LEADERBOARD");
-
-      // After leaderboard, wait for backend to send next question
-      setTimeout(() => {
-        setPhase("WAITING");
-      }, 3000);
-    }, 3000);
   };
 
   return (
@@ -165,11 +209,11 @@ export default function TriviaGameRoom() {
             {(phase === "QUESTION" || phase === "REVEAL") && (
               <div className="w-full flex flex-col items-center">
                 {phase === "QUESTION" && (
-                  <GameTimer durationSeconds={10} onTimeUp={handleTimeUp} />
+                  <GameTimer key={currentQuestion} durationSeconds={10} onTimeUp={handleTimeUp} />
                 )}
 
                 <h2 className="text-2xl md:text-3xl font-bold text-gray-800 text-center mb-8">
-                  {currentQuestion}
+                  {decodeHTML(currentQuestion)}
                 </h2>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 w-full max-w-2xl">
@@ -178,7 +222,9 @@ export default function TriviaGameRoom() {
                       "bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-800";
 
                     if (phase === "REVEAL") {
-                      if (idx === selectedAnswer) {
+                      if (opt === correctAnswer) {
+                        btnClass = "bg-green-500 border-green-600 text-white";
+                      } else if (idx === selectedAnswer) {
                         btnClass = "bg-red-500 border-red-600 text-white";
                       } else {
                         btnClass =
@@ -195,7 +241,7 @@ export default function TriviaGameRoom() {
                         disabled={phase !== "QUESTION" || selectedAnswer !== null}
                         className={`p-6 text-lg font-bold rounded-xl border-2 transition-all duration-200 shadow-sm ${btnClass}`}
                       >
-                        {opt}
+                        {decodeHTML(opt)}
                       </button>
                     );
                   })}
