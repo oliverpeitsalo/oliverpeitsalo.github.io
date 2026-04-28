@@ -65,9 +65,10 @@ export default function TriviaGameRoom() {
       setServerMsg(msg);
 
       if (msg.type === "new_question") {
+        const shuffledOpts = [...(msg.answers ?? [])].sort(() => Math.random() - 0.5);
         setPendingQuestion({
           q: msg.question ?? "",
-          opts: msg.answers ?? []
+          opts: shuffledOpts
         });
 
         setPhase((prev) => {

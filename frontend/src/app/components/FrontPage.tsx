@@ -136,9 +136,11 @@ export default function FrontPage() {
           )}
           </div>
         </div>
-        {username &&
-          <Chat username={username} />
-        }
+        {username && (
+          <div className="h-80 w-full max-w-4xl mx-auto mb-8 bg-white border border-gray-200 rounded-xl overflow-hidden shadow-lg">
+            <Chat username={username} />
+          </div>
+        )}
       </div>
     </>
   );
