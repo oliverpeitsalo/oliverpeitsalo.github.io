@@ -21,6 +21,10 @@ function broadcast(message: string) {
   }
 }
 
+function getConnectedUsers(): string[] {
+  return Array.from(clients.values());
+}
+
 webSocketServer.on("connection", (socket) => {
   console.log("Client connected")
 
@@ -34,10 +38,21 @@ webSocketServer.on("connection", (socket) => {
 
         clients.set(socket, parsed.user)
 
-        broadcast(JSON.stringify({
-          user: "SERVER",
-          text: `${parsed.user} joined the chat`
+        // Send the current users list to the new user
+        socket.send(JSON.stringify({
+          type: "USERS_LIST",
+          users: getConnectedUsers()
         }))
+
+        // Notify OTHER users that a new user joined (not the user themselves)
+        for (const client of webSocketServer.clients) {
+          if (client !== socket && client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+              type: "USER_JOIN",
+              user: parsed.user
+            }))
+          }
+        }
 
         return
       }
@@ -64,16 +79,16 @@ webSocketServer.on("connection", (socket) => {
     socket.on("close", () => {
       const username = clients.get(socket)
 
-    if (username) {
-      broadcast(JSON.stringify({
-        user: "SERVER",
-        text: `${username} left the chat`
-      }))
-    }
+      if (username) {
+        broadcast(JSON.stringify({
+          type: "USER_LEAVE",
+          user: username
+        }))
+      }
 
-    clients.delete(socket)
-    console.log("Client disconnected")
-  })
+      clients.delete(socket)
+      console.log("Client disconnected")
+    })
 })
 
 console.log(`Chat WebSocket service running in port:${port_number}`)

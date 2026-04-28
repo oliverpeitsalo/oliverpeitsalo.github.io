@@ -24,9 +24,6 @@ export default function FrontPage() {
     setRoomId("");
   };
 
-  const handleJoinTrivia = () => {
-  };
-
   const handleLeaderboard = () => {
       navigate('/leaderboard');
   };
@@ -119,15 +116,8 @@ export default function FrontPage() {
                 )}
 
                 <button
-                  onClick={handleJoinTrivia}
-                  className="px-8 py-4 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors shadow-md hover:shadow-lg transform hover:scale-105"
-                >
-                  Bruce Wayne is Batman
-                </button>
-
-                <button
                   onClick={handleLeaderboard}
-                  className="px-8 py-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors shadow-md hover:shadow-lg transform hover:scale-105"
+                  className="px-8 py-4 bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors shadow-md hover:shadow-lg transform hover:scale-105 mb-4"
                 >
                   Leaderboard
                 </button>

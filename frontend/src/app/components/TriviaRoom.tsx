@@ -189,14 +189,14 @@ export default function TriviaGameRoom() {
       </header>
 
       {/* Main Layout */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-6 gap-6">
         {/* Left Sidebar: Player List */}
         <div className="lg:col-span-1 flex flex-col gap-4">
           <PlayerList players={players} />
         </div>
 
         {/* Center: Game Board */}
-        <div className="lg:col-span-2 flex flex-col">
+        <div className="lg:col-span-3 flex flex-col">
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 flex-1 flex flex-col items-center justify-center relative">
             {phase === "WAITING" && (
               <div className="text-center">
@@ -278,7 +278,7 @@ export default function TriviaGameRoom() {
         </div>
 
         {/* Right Sidebar: Chat */}
-        <div className="lg:col-span-1 flex flex-col h-[500px] lg:h-auto">
+        <div className="lg:col-span-2 flex flex-col h-[500px] lg:h-auto">
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex-1 flex flex-col">
             <h2 className="text-xl font-bold p-4 bg-gray-50 border-b border-gray-200 text-gray-800">
               Room Chat
