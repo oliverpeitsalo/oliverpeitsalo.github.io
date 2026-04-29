@@ -80,10 +80,13 @@ struct OpenTdbQuestion {
     incorrect_answers: Vec<String>,
 }
 
-async fn fetch_questions(amount: usize) -> Vec<TriviaQuestion> {
-    println!("\n[OpenTDB] Fetching {} questions...", amount);
+// fetches questions forn the tdb database
+// Important: too many requests gives an http 429 error: too many requests
+// which is the reason for all the fallbacks
+async fn fetch_questions() -> Vec<TriviaQuestion> {
+    println!("\n[OpenTDB] Fetching 50 questions...");
 
-    let url = format!("https://opentdb.com/api.php?amount={}&type=multiple", amount);
+    let url = format!("https://opentdb.com/api.php?amount=50&type=multiple");
 
     for attempt in 0..3 {
         let resp = reqwest::get(&url).await;
@@ -138,9 +141,10 @@ async fn fetch_questions(amount: usize) -> Vec<TriviaQuestion> {
             "Paris".to_string(),
         ],
     };
-    vec![fallback; amount]
+    vec![fallback; 50]
 }
 
+// client thread created for each client
 async fn handle_client(stream: TcpStream, rooms: Rooms, global_leaderboard: GlobalLeaderboard) {
 
     let ws_stream = match accept_async(stream).await {
@@ -156,8 +160,9 @@ async fn handle_client(stream: TcpStream, rooms: Rooms, global_leaderboard: Glob
 
     let tx_for_cleanup = tx.clone();
     let rooms_for_cleanup = rooms.clone();
+    let global_lb_for_cleanup = global_leaderboard.clone();
 
-    // Task: send messages to client
+    // sends messages to client
     let write_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if ws_write.send(msg).await.is_err() {
@@ -166,7 +171,7 @@ async fn handle_client(stream: TcpStream, rooms: Rooms, global_leaderboard: Glob
         }
     });
 
-    // Task: read messages from client
+    // read messages from client
     let read_task = tokio::spawn(async move {
         while let Some(msg) = ws_read.next().await {
             let msg = match msg {
@@ -232,7 +237,7 @@ async fn handle_client(stream: TcpStream, rooms: Rooms, global_leaderboard: Glob
 
             // Fetch a batch of questions if room was new
             if need_new_question {
-                let questions = fetch_questions(10).await;
+                let questions = fetch_questions().await;
                 let mut rooms_lock = rooms.lock().unwrap();
                 let room = rooms_lock.get_mut(&client_msg.room).unwrap();
 
@@ -295,7 +300,7 @@ async fn handle_client(stream: TcpStream, rooms: Rooms, global_leaderboard: Glob
                 continue;
             }
 
-            // Must be answer message
+            // Must be answer message (frontend sneds an empty message if the user does not answer in time)
             if client_msg.msg_type.as_deref() != Some("answer") {
                 continue;
             }
@@ -319,9 +324,6 @@ async fn handle_client(stream: TcpStream, rooms: Rooms, global_leaderboard: Glob
 
                 if is_correct {
                     println!("[Room {}] {} answered CORRECTLY!", client_msg.room, client_msg.username);
-                    let mut lb_lock = global_leaderboard.lock().unwrap();
-                    *lb_lock.entry(client_msg.username.clone()).or_insert(0) += 1;
-                    save_leaderboard(&lb_lock);
                 } else {
                     println!("[Room {}] {} answered WRONG!", client_msg.room, client_msg.username);
                 }
@@ -343,7 +345,7 @@ async fn handle_client(stream: TcpStream, rooms: Rooms, global_leaderboard: Glob
                     ));
                 }
 
-                // Mark answered
+                // Mark that client answered
                 if !room.answered.contains(&client_msg.username) {
                     room.answered.push(client_msg.username.clone());
                 }
@@ -355,7 +357,7 @@ async fn handle_client(stream: TcpStream, rooms: Rooms, global_leaderboard: Glob
                     room.clients.len()
                 );
 
-                // Prepare score update
+                // Prepares score update
                 let correct_users: Vec<String> = room
                     .scores
                     .iter()
@@ -417,13 +419,13 @@ async fn handle_client(stream: TcpStream, rooms: Rooms, global_leaderboard: Glob
                     new_question_payload = Some((next.question.clone(), next.answers.clone()));
 
                     if need_more_questions {
-                        let questions = fetch_questions(10).await;
+                        let questions = fetch_questions().await;
                         let mut rooms_lock = rooms.lock().unwrap();
                         let room = rooms_lock.get_mut(&client_msg.room).unwrap();
                         room.question_queue.extend(questions);
                     }
                 } else {
-                    let mut questions = fetch_questions(10).await;
+                    let mut questions = fetch_questions().await;
                     let next = questions.remove(0);
                     let queue: VecDeque<TriviaQuestion> = questions.into_iter().collect();
 
@@ -484,6 +486,16 @@ async fn handle_client(stream: TcpStream, rooms: Rooms, global_leaderboard: Glob
             });
 
             if !disconnected.is_empty() {
+                // Update global leaderboard with max score for disconnected users
+                for u in &disconnected {
+                    if let Some((_, score)) = room.scores.iter().find(|(user, _)| user == u) {
+                        let mut lb_lock = global_lb_for_cleanup.lock().unwrap();
+                        let current = lb_lock.entry(u.clone()).or_insert(0);
+                        *current = (*current).max(*score);
+                        save_leaderboard(&lb_lock);
+                    }
+                }
+
                 for u in &disconnected {
                     room.scores.retain(|(score_user, _)| score_user != u);
                 }
