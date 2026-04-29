@@ -3,60 +3,206 @@ import { useNavigate } from "react-router-dom";
 
 type LeaderboardScore = [string, number];
 
+// Node.js Leaderboard Microservice types
+interface LeaderboardEntry {
+  username: string;
+  score: number;
+  submittedAt: string;
+}
+
+interface NodeLeaderboardResponse {
+  leaderboard: LeaderboardEntry[];
+  totalEntries: number;
+}
+
+// Rust Backend types
 type ServerMessage = {
   type?: string;
   scores?: LeaderboardScore[];
 };
 
+type ValidationStatus = {
+  status: "connecting" | "loaded" | "error" | "inconsistent";
+  rustData: LeaderboardScore[] | null;
+  nodeData: LeaderboardScore[] | null;
+  isConsistent: boolean;
+  errorMessage?: string;
+};
+
+/**
+ * Validates leaderboard data consistency across multiple distributed services.
+ * This implements the distributed systems pattern of multi-source verification.
+ */
 export default function Leaderboard() {
   const navigate = useNavigate();
   const socketReference = useRef<WebSocket | null>(null);
   const [scores, setScores] = useState<LeaderboardScore[]>([]);
-  const [status, setStatus] = useState<"connecting" | "loaded" | "error">("connecting");
+  const [validation, setValidation] = useState<ValidationStatus>({
+    status: "connecting",
+    rustData: null,
+    nodeData: null,
+    isConsistent: false,
+  });
+
+  // Fetch leaderboard from Node.js microservice
+  const fetchNodeLeaderboard = async (): Promise<LeaderboardScore[] | null> => {
+    try {
+      const response = await fetch("https://leaderboard-service-lhoy.onrender.com/leaderboard");
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      const data: NodeLeaderboardResponse = await response.json();
+      
+      console.log("Node.js raw response:", data);
+      
+      // Convert from {username, score, submittedAt} format to [username, score] tuples
+      if (data.leaderboard && Array.isArray(data.leaderboard)) {
+        return data.leaderboard
+          .map((entry: LeaderboardEntry) => [entry.username, entry.score] as LeaderboardScore)
+          .sort((a, b) => b[1] - a[1]); // Sort by score descending
+      }
+      
+      console.warn("Node.js response missing leaderboard array:", data);
+      return null;
+    } catch (err) {
+      console.error("Failed to fetch from Node.js leaderboard service:", err);
+      return null;
+    }
+  };
+
+  // Reset leaderboard in Node.js microservice
+  const clearLeaderboard = async () => {
+  try {
+    const response = await fetch(
+      "https://leaderboard-service-lhoy.onrender.com/leaderboard",
+      {
+        method: "DELETE",
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Failed to clear leaderboard");
+    }
+
+    console.log("Leaderboard cleared");
+
+    // päivitä näkymä heti
+    setScores([]);
+  } catch (error) {
+    console.error("Error clearing leaderboard:", error);
+  }
+};
+
+  // Validate consistency between two data sources
+  const isDataConsistent = (data1: LeaderboardScore[] | null, data2: LeaderboardScore[] | null): boolean => {
+    if (!data1 || !data2) return false;
+    if (data1.length !== data2.length) return false;
+    
+    // Check if top 10 entries match (accounting for tie-breaking differences)
+    const top10_1 = data1.slice(0, 10);
+    const top10_2 = data2.slice(0, 10);
+
+    console.log("Top10_1:", top10_1)
+    console.log("Top10_2:", top10_2)
+
+    return top10_1.every((entry, idx) => 
+      entry[0] === top10_2[idx][0] && entry[1] === top10_2[idx][1]
+    );
+  };
 
   useEffect(() => {
-    const socket = new WebSocket("wss://rust-trvia-microservice.onrender.com");
-    // const socket = new WebSocket("ws://localhost:9001"); // For local testing
-    socketReference.current = socket;
+    let isMounted = true;
+    
+    const fetchBothSources = async () => {
+      setValidation(prev => ({ ...prev, status: "connecting" }));
+      
+      // Fetch from Node.js microservice
+      const nodeData = await fetchNodeLeaderboard();
+      
+      // Fetch from Rust backend via WebSocket
+      const rustData = await new Promise<LeaderboardScore[] | null>((resolve) => {
+        const socket = new WebSocket("wss://rust-trvia-microservice.onrender.com");
+        // const socket = new WebSocket("ws://localhost:9001"); // For local testing
+        socketReference.current = socket;
 
-    socket.onopen = () => {
-      console.log("Connected to backend for leaderboard");
-      socket.send(
-        JSON.stringify({
-          type: "get_leaderboard",
-          room: "global",
-          username: "viewer",
-        })
-      );
+        const timeout = setTimeout(() => {
+          socket.close();
+          resolve(null);
+        }, 10000); // 10 second timeout
+
+        socket.onopen = () => {
+          console.log("Connected to Rust backend for leaderboard");
+          socket.send(
+            JSON.stringify({
+              type: "get_leaderboard",
+              room: "global",
+              username: "viewer",
+            })
+          );
+        };
+
+        socket.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data) as ServerMessage;
+            if (msg.type === "all_time_leaderboard" && msg.scores) {
+              clearTimeout(timeout);
+              resolve(msg.scores);
+              socket.close();
+            }
+          } catch (err) {
+            console.error("Failed to parse leaderboard message", err);
+          }
+        };
+
+        socket.onerror = () => {
+          clearTimeout(timeout);
+          resolve(null);
+        };
+      });
+
+      if (!isMounted) return;
+
+      // Determine consistency
+      const isConsistent = isDataConsistent(rustData, nodeData);
+      const validatedData = isConsistent && rustData ? rustData : rustData || nodeData || [];
+
+      const newValidation: ValidationStatus = {
+        rustData,
+        nodeData,
+        isConsistent,
+        status: validatedData.length > 0 ? (isConsistent ? "loaded" : "inconsistent") : "error",
+        errorMessage: isConsistent ? undefined : "⚠️ Data inconsistency detected between services"
+      };
+
+      setValidation(newValidation);
+      setScores(validatedData);
     };
 
-    socket.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data) as ServerMessage;
-        if (msg.type === "all_time_leaderboard" && msg.scores) {
-          setScores(msg.scores);
-          setStatus("loaded");
-          socket.close(); // We got what we needed, close the connection
-        }
-      } catch (err) {
-        console.error("Failed to parse leaderboard message", err);
-      }
-    };
-
-    socket.onerror = () => {
-      setStatus("error");
-    };
+    fetchBothSources();
 
     return () => {
-      if (socketReference.current === socket) {
-        socketReference.current = null;
+      isMounted = false;
+      if (socketReference.current) {
+        socketReference.current.close();
       }
-      socket.close();
     };
   }, []);
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 md:p-8 flex flex-col items-center font-sans">
+      <button
+          onClick={clearLeaderboard}
+          style={{
+            backgroundColor: "#ef4444",
+            color: "white",
+            border: "none",
+            padding: "8px 16px",
+            borderRadius: "6px",
+            cursor: "pointer",
+            fontWeight: "500"
+          }}
+        >
+          Reset leaderboard
+        </button>
       <div className="w-full max-w-3xl">
         {/* Header */}
         <header className="flex justify-between items-center mb-8 bg-white p-4 rounded-xl shadow-sm border border-gray-200">
@@ -72,14 +218,34 @@ export default function Leaderboard() {
 
         {/* Content */}
         <div className="bg-white border border-gray-200 rounded-xl shadow-lg p-6 min-h-[500px] flex flex-col">
-          {status === "connecting" && (
+          {validation.status === "connecting" && (
             <div className="flex-1 flex flex-col items-center justify-center">
               <div className="w-12 h-12 border-4 border-purple-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-              <p className="text-gray-500 font-medium text-lg">Loading global scores...</p>
+              <p className="text-gray-500 font-medium text-lg">Validating data from multiple sources...</p>
+              <p className="text-gray-400 text-sm mt-2">Checking: Rust Backend + Node.js Microservice</p>
             </div>
           )}
 
-          {status === "error" && (
+          {validation.status === "inconsistent" && (
+            <div className="mb-6 p-4 bg-yellow-50 border-l-4 border-yellow-400 rounded">
+              <div className="flex items-start">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <h3 className="text-sm font-medium text-yellow-800">Data Inconsistency Detected</h3>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    The leaderboard data differs between services. Showing data from the primary source (Rust Backend).
+                    This may indicate synchronization issues in the distributed system.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {validation.status === "error" && (
             <div className="flex-1 flex flex-col items-center justify-center text-center">
               <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mb-4">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8">
@@ -87,7 +253,7 @@ export default function Leaderboard() {
                 </svg>
               </div>
               <p className="text-gray-800 font-bold text-xl mb-2">Connection Error</p>
-              <p className="text-gray-500 mb-6">Could not retrieve the leaderboard from the server.</p>
+              <p className="text-gray-500 mb-6">Could not retrieve leaderboard from any service.</p>
               <button
                 onClick={() => window.location.reload()}
                 className="px-6 py-2 bg-purple-600 text-white font-medium rounded-lg hover:bg-purple-700 transition-colors shadow-sm"
@@ -97,8 +263,24 @@ export default function Leaderboard() {
             </div>
           )}
 
-          {status === "loaded" && (
+          {(validation.status === "loaded" || validation.status === "inconsistent") && (
             <div className="flex-1 flex flex-col">
+              {/* Validation Status Badge */}
+              <div className={`mb-4 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium ${
+                validation.isConsistent 
+                  ? "bg-green-50 text-green-700 border border-green-200"
+                  : "bg-yellow-50 text-yellow-700 border border-yellow-200"
+              }`}>
+                <span className={validation.isConsistent ? "text-green-500" : "text-yellow-500"}>
+                  {validation.isConsistent ? "✓" : "⚠"}
+                </span>
+                <span>
+                  {validation.isConsistent 
+                    ? "Data validated across all sources" 
+                    : "Data from primary source (validation pending)"}
+                </span>
+              </div>
+
               {scores.length === 0 ? (
                 <div className="flex-1 flex items-center justify-center">
                   <p className="text-gray-400 text-lg font-medium">No scores yet. Be the first!</p>

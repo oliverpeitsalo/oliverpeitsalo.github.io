@@ -42,6 +42,26 @@ export default function TriviaGameRoom() {
 
   const username = sessionStorage.getItem("username") || "";
 
+  const saveScoreToNodeServer = async (username: string, score: number) => {
+    const response = await fetch("https://leaderboard-service-lhoy.onrender.com/score", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        username,
+        score,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || "Failed to save score");
+    }
+
+    return response.json();
+  };
+
   useEffect(() => {
     const socket = new WebSocket("wss://rust-trvia-microservice.onrender.com");
     socketReference.current = socket;
@@ -82,14 +102,23 @@ export default function TriviaGameRoom() {
         if (msg.correct_answer) {
           setCorrectAnswer(msg.correct_answer);
         }
-        setPlayers(
-          (msg.scores as [string, number][])
-            .map(([name, score], index) => ({
-              id: String(index),
-              name,
-              score,
-            }))
-        );
+
+        const updatedPlayers = (msg.scores as [string, number][])
+          .map(([name, score], index) => ({
+            id: String(index),
+            name,
+            score,
+          }));
+
+        setPlayers(updatedPlayers);
+
+        const ownPlayer = updatedPlayers.find((p) => p.name === username);
+
+        if (ownPlayer) {
+          saveScoreToNodeServer(username, ownPlayer.score)
+            .then(() => console.log("Score saved to Node leaderboard"))
+            .catch((error) => console.error("Failed to save score:", error));
+        }
       }
       
     };
