@@ -8,7 +8,7 @@ const PORT = process.env.PORT || 3001;
 
 const DATA_DIR = path.join(__dirname, "data");
 const DATA_FILE = path.join(DATA_DIR, "leaderboard.json");
-const MAX_SCORE = 4;
+const MAX_SCORE = 9999;
 const MAX_ENTRIES_RETURNED = 20;
 
 app.use(cors());
@@ -121,7 +121,19 @@ app.post("/score", async (req, res) => {
       submittedAt: new Date().toISOString()
     };
 
-    leaderboard.push(newEntry);
+    const existingEntry = leaderboard.find(
+      (entry) => entry.username === newEntry.username
+    );
+
+    if (existingEntry) {
+      if (newEntry.score > existingEntry.score) {
+        existingEntry.score = newEntry.score;
+        existingEntry.submittedAt = newEntry.submittedAt;
+      }
+    } else {
+      leaderboard.push(newEntry);
+    }
+
     const sortedLeaderboard = sortLeaderboard(leaderboard);
 
     await writeLeaderboard(sortedLeaderboard);
