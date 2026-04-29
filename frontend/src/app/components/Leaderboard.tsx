@@ -92,18 +92,18 @@ export default function Leaderboard() {
 };
 
   // Validate consistency between two data sources
-  const isDataConsistent = (data1: LeaderboardScore[] | null, data2: LeaderboardScore[] | null): boolean => {
+ const isDataConsistent = (
+    data1: LeaderboardScore[] | null,
+    data2: LeaderboardScore[] | null
+  ): boolean => {
     if (!data1 || !data2) return false;
-    if (data1.length !== data2.length) return false;
-    
-    // Check if top 10 entries match (accounting for tie-breaking differences)
+
     const top10_1 = data1.slice(0, 10);
     const top10_2 = data2.slice(0, 10);
 
-    console.log("Top10_1:", top10_1)
-    console.log("Top10_2:", top10_2)
+    if (top10_1.length !== top10_2.length) return false;
 
-    return top10_1.every((entry, idx) => 
+    return top10_1.every((entry, idx) =>
       entry[0] === top10_2[idx][0] && entry[1] === top10_2[idx][1]
     );
   };
