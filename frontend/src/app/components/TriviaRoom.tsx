@@ -40,7 +40,7 @@ export default function TriviaGameRoom() {
   const handleBack = () => navigate(`/`);
 
 
-  const username = sessionStorage.getItem("username") || "";
+  const username = localStorage.getItem("username") || "";
 
   const saveScoreToNodeServer = async (username: string, score: number) => {
     const response = await fetch("https://leaderboard-service-lhoy.onrender.com/score", {

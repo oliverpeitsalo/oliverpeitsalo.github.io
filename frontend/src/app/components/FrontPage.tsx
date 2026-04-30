@@ -32,7 +32,7 @@ export default function FrontPage() {
     if (!inputUsername.trim()) { return }
       const trimmedUsername = inputUsername.trim();
       setUsername(trimmedUsername);
-      sessionStorage.setItem("username", trimmedUsername);
+      localStorage.setItem("username", trimmedUsername);
   }
 
   return (
