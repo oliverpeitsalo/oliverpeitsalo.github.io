@@ -21,6 +21,16 @@ const decodeHTML = (html: string) => {
   return txt.value;
 };
 
+// Fisher-Yates shuffle algorithm for proper randomization
+const shuffleArray = <T,>(array: T[]): T[] => {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+};
+
 export default function TriviaGameRoom() {
   const { roomId } = useParams();
   const navigate = useNavigate();
@@ -85,7 +95,7 @@ export default function TriviaGameRoom() {
       setServerMsg(msg);
 
       if (msg.type === "new_question") {
-        const shuffledOpts = [...(msg.answers ?? [])].sort(() => Math.random() - 0.5);
+        const shuffledOpts = shuffleArray(msg.answers ?? []);
         setPendingQuestion({
           q: msg.question ?? "",
           opts: shuffledOpts
