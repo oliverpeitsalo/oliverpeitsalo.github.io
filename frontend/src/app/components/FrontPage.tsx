@@ -5,7 +5,7 @@ import { useState } from 'react';
 
 export default function FrontPage() {
   const [username, setUsername] = useState<string>(() => {
-    return sessionStorage.getItem("username") || "";
+    return localStorage.getItem("username") || "";
   });
   const [inputUsername, setInputUsername] = useState<string>("");
   const [roomId, setRoomId] = useState<string>("");
